@@ -1,7 +1,7 @@
 name: Publish Articles to Production
 
 on:
-  workflow_dispatch: # Adds a manual trigger
+  workflow_dispatch: # Allows manual triggering of the workflow
 
 jobs:
   publish-articles:
@@ -12,17 +12,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up Node.js (optional, for parsing Markdown)
+      # Step 2: Set up Node.js for Markdown Parsing
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      # Step 3: Install Dependencies
+      # Step 3: Install Dependencies for the Node.js Script
       - name: Install Dependencies
         run: npm install gray-matter axios
 
-      # Step 4: Parse Markdown Files and Submit to API
+      # Step 4: Parse Markdown Files and Submit to the API
       - name: Publish Articles
         run: |
           node <<EOF
@@ -42,60 +42,66 @@ jobs:
           // Find all Markdown files in the 'articles' directory
           const files = fs.readdirSync('./articles').filter(file => file.endsWith('.md'));
 
+          if (files.length === 0) {
+            console.warn("No Markdown files found in the 'articles' directory.");
+            process.exit(0); // Exit gracefully if no articles are found
+          }
+
           const skippedArticles = [];
           const publishedArticles = [];
 
-          for (const file of files) {
-            try {
-              // Read and parse the Markdown file
-              const content = fs.readFileSync(`./articles/${file}`, 'utf8');
-              const { data, content: markdownContent } = matter(content);
+          (async () => {
+            for (const file of files) {
+              try {
+                // Read and parse the Markdown file
+                const content = fs.readFileSync(`./articles/${file}`, 'utf8');
+                const { data, content: markdownContent } = matter(content);
 
-              // Validate required fields in metadata
-              const requiredFields = ['title', 'description', 'author', 'date', 'tags'];
-              for (const field of requiredFields) {
-                if (!data[field]) {
-                  console.error(`Missing required field '${field}' in ${file}`);
-                  process.exit(1);
+                // Validate required fields in metadata
+                const requiredFields = ['title', 'description', 'author', 'date', 'tags'];
+                for (const field of requiredFields) {
+                  if (!data[field]) {
+                    console.error(`Missing required field '${field}' in ${file}`);
+                    process.exit(1);
+                  }
                 }
-              }
 
-              // Prepare the payload
-              const payload = {
-                title: data.title,
-                description: data.description,
-                date: data.date,
-                tags: data.tags,
-                author: data.author,
-                content: markdownContent
-              };
+                // Prepare the payload
+                const payload = {
+                  title: data.title,
+                  description: data.description,
+                  date: data.date,
+                  tags: data.tags,
+                  author: data.author,
+                  content: markdownContent
+                };
 
-              // Submit the article to the API
-              const response = await axios.post(apiEndpoint, payload, {
-                headers: {
-                  'Content-Type': 'application/json',
-                  'X-API-Key': apiKey
+                // Submit the article to the API
+                const response = await axios.post(apiEndpoint, payload, {
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                  }
+                });
+
+                console.log(`Successfully published ${file}:`, response.data);
+                publishedArticles.push(file);
+
+              } catch (error) {
+                if (error.response?.status === 409) {
+                  console.warn(`Article already exists: ${file}`);
+                  skippedArticles.push(file);
+                } else {
+                  console.error(`Failed to publish ${file}:`, error.response?.data || error.message);
+                  process.exit(1); // Stop the workflow on critical errors
                 }
-              });
-
-              console.log(`Successfully published ${file}:`, response.data);
-              publishedArticles.push(file);
-
-            } catch (error) {
-              if (error.response?.status === 409) {
-                console.warn(`Article already exists: ${file}`);
-                skippedArticles.push(file);
-              } else {
-                console.error(`Failed to publish ${file}:`, error.response?.data || error.message);
-                process.exit(1); // Stop the workflow on critical errors
               }
             }
-          }
 
-          console.log("Published Articles:", publishedArticles);
-          console.log("Skipped Articles (Already Exist):", skippedArticles);
+            console.log("Published Articles:", publishedArticles);
+            console.log("Skipped Articles (Already Exist):", skippedArticles);
+          })();
           EOF
-
-    env:
-      API_TOKEN: ${{ secrets.API_TOKEN }}
-      API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
