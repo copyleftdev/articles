@@ -1,9 +1,7 @@
 name: Publish Articles to Production
 
 on:
-  push:
-    branches:
-      - master
+  workflow_dispatch: # Adds a manual trigger
 
 jobs:
   publish-articles:
@@ -44,7 +42,10 @@ jobs:
           // Find all Markdown files in the 'articles' directory
           const files = fs.readdirSync('./articles').filter(file => file.endsWith('.md'));
 
-          files.forEach(async (file) => {
+          const skippedArticles = [];
+          const publishedArticles = [];
+
+          for (const file of files) {
             try {
               // Read and parse the Markdown file
               const content = fs.readFileSync(`./articles/${file}`, 'utf8');
@@ -78,16 +79,21 @@ jobs:
               });
 
               console.log(`Successfully published ${file}:`, response.data);
+              publishedArticles.push(file);
 
             } catch (error) {
               if (error.response?.status === 409) {
                 console.warn(`Article already exists: ${file}`);
+                skippedArticles.push(file);
               } else {
                 console.error(`Failed to publish ${file}:`, error.response?.data || error.message);
-                process.exit(1);
+                process.exit(1); // Stop the workflow on critical errors
               }
             }
-          });
+          }
+
+          console.log("Published Articles:", publishedArticles);
+          console.log("Skipped Articles (Already Exist):", skippedArticles);
           EOF
 
     env:
