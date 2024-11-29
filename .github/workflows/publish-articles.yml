@@ -1,0 +1,95 @@
+name: Publish Articles to Production
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  publish-articles:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Node.js (optional, for parsing Markdown)
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      # Step 3: Install Dependencies
+      - name: Install Dependencies
+        run: npm install gray-matter axios
+
+      # Step 4: Parse Markdown Files and Submit to API
+      - name: Publish Articles
+        run: |
+          node <<EOF
+          const fs = require('fs');
+          const matter = require('gray-matter');
+          const axios = require('axios');
+
+          // Load API Key and Endpoint from Environment
+          const apiKey = process.env.API_TOKEN;
+          const apiEndpoint = process.env.API_ENDPOINT;
+
+          if (!apiKey || !apiEndpoint) {
+            console.error("API_TOKEN or API_ENDPOINT is not set");
+            process.exit(1);
+          }
+
+          // Find all Markdown files in the 'articles' directory
+          const files = fs.readdirSync('./articles').filter(file => file.endsWith('.md'));
+
+          files.forEach(async (file) => {
+            try {
+              // Read and parse the Markdown file
+              const content = fs.readFileSync(`./articles/${file}`, 'utf8');
+              const { data, content: markdownContent } = matter(content);
+
+              // Validate required fields in metadata
+              const requiredFields = ['title', 'description', 'author', 'date', 'tags'];
+              for (const field of requiredFields) {
+                if (!data[field]) {
+                  console.error(`Missing required field '${field}' in ${file}`);
+                  process.exit(1);
+                }
+              }
+
+              // Prepare the payload
+              const payload = {
+                title: data.title,
+                description: data.description,
+                date: data.date,
+                tags: data.tags,
+                author: data.author,
+                content: markdownContent
+              };
+
+              // Submit the article to the API
+              const response = await axios.post(apiEndpoint, payload, {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-API-Key': apiKey
+                }
+              });
+
+              console.log(`Successfully published ${file}:`, response.data);
+
+            } catch (error) {
+              if (error.response?.status === 409) {
+                console.warn(`Article already exists: ${file}`);
+              } else {
+                console.error(`Failed to publish ${file}:`, error.response?.data || error.message);
+                process.exit(1);
+              }
+            }
+          });
+          EOF
+
+    env:
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
