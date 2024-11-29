@@ -1,4 +1,3 @@
-```markdown
 ---
 title: "Comprehensive Cheat Sheet for Using MuMut in Mutation Testing"
 description: "A detailed cheat sheet on using MuMut for mutation testing, covering commands, configurations, and real-world use cases."
@@ -185,4 +184,3 @@ jobs:
 MuMut simplifies mutation testing, enabling developers to enhance the quality and coverage of their test suites. By incorporating MuMut into your development workflow, you can identify untested areas, improve code quality, and ensure your application is resilient against unexpected changes.
 
 Start integrating MuMut today and elevate your software testing process!
-```
